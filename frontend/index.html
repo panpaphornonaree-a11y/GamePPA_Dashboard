@@ -1,0 +1,274 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game PPA Analytics Dashboard</title>
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 25px;
+      font-family: Arial, sans-serif;
+      background: #f3f5fa;
+      color: #202b43;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+    }
+
+    h1 { margin-bottom: 5px; }
+
+    .subtitle {
+      color: #718096;
+      margin-top: 0;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 18px;
+      margin: 25px 0;
+    }
+
+    .card, .panel {
+      background: white;
+      padding: 22px;
+      border-radius: 14px;
+      box-shadow: 0 3px 12px rgba(0,0,0,.05);
+    }
+
+    .card h3 {
+      color: #718096;
+      font-size: 15px;
+      margin-top: 0;
+    }
+
+    .number {
+      font-size: 30px;
+      font-weight: bold;
+    }
+
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    select, button {
+      padding: 11px;
+      border-radius: 8px;
+      border: 1px solid #d5dbea;
+      background: white;
+      font-size: 15px;
+    }
+
+    button {
+      cursor: pointer;
+      background: #3157c8;
+      color: white;
+      border: none;
+    }
+
+    .player-info {
+      line-height: 2;
+      margin-top: 15px;
+    }
+
+    .status {
+      color: #718096;
+      margin: 15px 0;
+    }
+
+    @media(max-width: 600px) {
+      body { padding: 14px; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+  <h1>Game PPA Analytics</h1>
+  <p class="subtitle">Player Performance Dashboard</p>
+
+  <p id="status" class="status">กำลังโหลดข้อมูล...</p>
+
+  <div class="cards">
+    <div class="card">
+      <h3>ผู้เล่นทั้งหมด</h3>
+      <div class="number" id="totalPlayers">-</div>
+    </div>
+
+    <div class="card">
+      <h3>คะแนนสูงสุด</h3>
+      <div class="number" id="topScore">-</div>
+    </div>
+
+    <div class="card">
+      <h3>จำนวนการเล่นรวม</h3>
+      <div class="number" id="totalPlays">-</div>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="panel">
+      <h3>คะแนนสูงสุดของผู้เล่น</h3>
+      <div id="scoreChart"></div>
+    </div>
+
+    <div class="panel">
+      <h3>จำนวนครั้งที่เล่น</h3>
+      <div id="playChart"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>ข้อมูลรายบุคคล</h2>
+
+    <select id="playerSelect">
+      <option value="">เลือกผู้เล่น</option>
+    </select>
+
+    <div id="playerInfo" class="player-info">
+      กรุณาเลือกผู้เล่น
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const API_URL = "https://gameppa-dashboard.onrender.com/api/players";
+
+  let players = [];
+
+  async function loadData() {
+    const status = document.getElementById("status");
+
+    try {
+      const response = await fetch(API_URL);
+
+      if (!response.ok) {
+        throw new Error("API ตอบกลับผิดพลาด: " + response.status);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error("ไม่สามารถโหลดข้อมูลผู้เล่นได้");
+      }
+
+      players = data.players || [];
+
+      document.getElementById("totalPlayers").textContent =
+        data.totalPlayers;
+
+      const topScore = players.length
+        ? Math.max(...players.map(p => Number(p.bestScore) || 0))
+        : 0;
+
+      const totalPlays = players.reduce(
+        (sum, p) => sum + (Number(p.playCount) || 0), 0
+      );
+
+      document.getElementById("topScore").textContent =
+        topScore.toLocaleString();
+
+      document.getElementById("totalPlays").textContent =
+        totalPlays.toLocaleString();
+
+      drawCharts();
+      fillPlayerSelect();
+
+      status.textContent = "โหลดข้อมูลสำเร็จ";
+      status.style.color = "green";
+
+    } catch (error) {
+      console.error(error);
+      status.textContent = "เกิดข้อผิดพลาด: " + error.message;
+      status.style.color = "red";
+    }
+  }
+
+  function drawCharts() {
+    const names = players.map(p => p.username);
+    const scores = players.map(p => Number(p.bestScore) || 0);
+    const plays = players.map(p => Number(p.playCount) || 0);
+
+    Plotly.newPlot("scoreChart", [{
+      x: names,
+      y: scores,
+      type: "bar"
+    }], {
+      margin: { t: 15, b: 90 },
+      xaxis: { tickangle: -45 },
+      yaxis: { title: "คะแนน" },
+      autosize: true
+    }, { responsive: true });
+
+    Plotly.newPlot("playChart", [{
+      x: names,
+      y: plays,
+      type: "bar"
+    }], {
+      margin: { t: 15, b: 90 },
+      xaxis: { tickangle: -45 },
+      yaxis: { title: "จำนวนครั้ง" },
+      autosize: true
+    }, { responsive: true });
+  }
+
+  function fillPlayerSelect() {
+    const select = document.getElementById("playerSelect");
+
+    select.innerHTML = '<option value="">เลือกผู้เล่น</option>';
+
+    players.forEach((player, index) => {
+      const option = document.createElement("option");
+      option.value = index;
+      option.textContent = player.username;
+      select.appendChild(option);
+    });
+  }
+
+  document.getElementById("playerSelect").addEventListener(
+    "change", function() {
+      const player = players[Number(this.value)];
+
+      if (this.value === "" || !player) {
+        document.getElementById("playerInfo").textContent =
+          "กรุณาเลือกผู้เล่น";
+        return;
+      }
+
+      document.getElementById("playerInfo").innerHTML = `
+        <strong>Username:</strong> ${escapeHTML(player.username)}<br>
+        <strong>คะแนนสูงสุด:</strong> ${Number(player.bestScore || 0).toLocaleString()}<br>
+        <strong>จำนวนครั้งที่เล่น:</strong> ${Number(player.playCount || 0).toLocaleString()}
+      `;
+    }
+  );
+
+  function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  loadData();
+</script>
+
+</body>
+</html>
